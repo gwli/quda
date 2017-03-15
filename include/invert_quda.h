@@ -862,7 +862,7 @@ namespace quda {
     ColorSpinorField *rp;       //! residual vector
     ColorSpinorField *yp;       //! high precision accumulator
     ColorSpinorField *tmpp;     //! temporary for mat-vec
-    ColorSpinorField *x_sloppy; //! sloppy solution vector
+    //ColorSpinorField *x_sloppy; //! sloppy solution vector
     ColorSpinorField *r_sloppy; //! sloppy residual vector
     ColorSpinorField *r_pre;    //! residual passed to preconditioner
     ColorSpinorField *p_pre;    //! preconditioner result
@@ -889,7 +889,7 @@ namespace quda {
     //
     //void RunProjectedCycles(ColorSpinorField *out, ColorSpinorField *in, GMResDRDeflationParam *dpar, const bool enforce_mixed_precision);
 
-    int RunFlexArnoldiProcess(const int start_idx, const bool do_givens);
+    int FlexArnoldiProcedure (const int start_idx, const bool do_givens);
 
     void RestartVZH();
 
