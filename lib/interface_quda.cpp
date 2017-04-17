@@ -2179,7 +2179,11 @@ multigrid_solver::multigrid_solver(QudaMultigridParam &mg_param, TimeProfile &pr
   if (mg_param.n_level > QUDA_MAX_MG_LEVEL)
     errorQuda("Requested MG levels %d greater than allowed maximum %d", mg_param.n_level, QUDA_MAX_MG_LEVEL);
   for (int i=0; i<mg_param.n_level; i++) {
+#ifndef STAGGERED_NORM_MULTIGRID
     if (mg_param.smoother_solve_type[i] != QUDA_DIRECT_SOLVE && mg_param.smoother_solve_type[i] != QUDA_DIRECT_PC_SOLVE)
+#else
+    if (mg_param.smoother_solve_type[i] != QUDA_DIRECT_SOLVE && mg_param.smoother_solve_type[i] != QUDA_DIRECT_PC_SOLVE && mg_param.smoother_solve_type[0] != QUDA_NORMOP_PC_SOLVE) 
+#endif
       errorQuda("Unsupported smoother solve type %d on level %d", mg_param.smoother_solve_type[i], i);
   }
   if (param->solve_type != QUDA_DIRECT_SOLVE)
@@ -2202,7 +2206,11 @@ multigrid_solver::multigrid_solver(QudaMultigridParam &mg_param, TimeProfile &pr
   DiracParam diracParam;
   setDiracSloppyParam(diracParam, param, outer_pc_solve);
   d = Dirac::create(diracParam);
+#ifndef STAGGERED_NORM_MULTIGRID
   m = new DiracM(*d);
+#else
+  m = new DiracMdagM(*d);
+#endif
 
   // this is the Dirac operator we use for smoothing
   DiracParam diracSmoothParam;
@@ -2210,21 +2218,29 @@ multigrid_solver::multigrid_solver(QudaMultigridParam &mg_param, TimeProfile &pr
     (mg_param.smoother_solve_type[0] == QUDA_NORMOP_PC_SOLVE);
   setDiracSloppyParam(diracSmoothParam, param, fine_grid_pc_solve);
   dSmooth = Dirac::create(diracSmoothParam);
+#ifndef STAGGERED_NORM_MULTIGRID
   mSmooth = new DiracM(*dSmooth);
+#else
+  mSmooth = new DiracMdagM(*dSmooth);
+#endif
 
   // this is the Dirac operator we use for sloppy smoothing (we use the preconditioner fields for this)
   DiracParam diracSmoothSloppyParam;
   setDiracPreParam(diracSmoothSloppyParam, param, fine_grid_pc_solve, true);
   dSmoothSloppy = Dirac::create(diracSmoothSloppyParam);;
+#ifndef STAGGERED_NORM_MULTIGRID
   mSmoothSloppy = new DiracM(*dSmoothSloppy);
+#else
+  mSmoothSloppy = new DiracMdagM(*dSmoothSloppy);
+#endif
 
   printfQuda("Creating vector of null space fields of length %d\n", mg_param.n_vec[0]);
 
   ColorSpinorParam cpuParam(0, *param, cudaGauge->X(), pc_solution, QUDA_CPU_FIELD_LOCATION);
   cpuParam.create = QUDA_ZERO_FIELD_CREATE;
   cpuParam.precision = param->cuda_prec_sloppy;
-  B.resize(mg_param.n_vec[0]);
-  for (int i=0; i<mg_param.n_vec[0]; i++) B[i] = new cpuColorSpinorField(cpuParam);
+  B.reserve(mg_param.n_vec[0]);
+  for (int i=0; i<mg_param.n_vec[0]; i++) B.push_back( new cpuColorSpinorField(cpuParam) );
 
   // fill out the MG parameters for the fine level
   mgParam = new MGParam(mg_param, B, m, mSmooth, mSmoothSloppy);

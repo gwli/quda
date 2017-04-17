@@ -2,6 +2,8 @@
 #include <color_spinor_field_order.h>
 #include <index_helper.cuh>
 
+#include <random> 
+
 namespace quda {
 
   using namespace colorspinor;
@@ -331,6 +333,56 @@ namespace quda {
     } else {
       errorQuda("Precision %d not implemented", a.Precision()); 
     }    
+  }
+
+//2d staggered:
+  const unsigned int rn_seed = 1984;
+  std::ranlux24      rn_gen(rn_seed);
+
+  template<typename Float, int fineSpin>
+  void generate2DU1Vector(cpuColorSpinorField &a, std::ranlux24 &gen) {
+     if(a.FieldOrder() != QUDA_SPACE_SPIN_COLOR_FIELD_ORDER) errorQuda("\nIncorrect feild order (%d) or null vector index (%d).\n", a.FieldOrder());
+     quda::colorspinor::FieldOrderCB<Float,fineSpin,3,1,QUDA_SPACE_SPIN_COLOR_FIELD_ORDER> aOrder(static_cast<ColorSpinorField&>(a));
+
+     //blas::zero(a);
+     warningQuda("\nProcessing 2d null vector.");
+
+     std::normal_distribution<> dist(0.0, 1.0);
+
+     const int c = 0;
+
+     for (int parity = 0; parity < 2; parity++) {
+        for(int x_cb = 0; x_cb < a.VolumeCB(); x_cb++) {
+
+           int i = parity*a.VolumeCB() + x_cb;
+           int xx[4] = {0};
+           a.LatticeIndex(xx, i);
+
+           if( xx[2] == 0 && xx[3] == 0 )
+           {
+             std::complex<Float> rnd_val = std::complex<Float>(static_cast<Float>(dist(gen)), static_cast<Float>(dist(gen)));
+             aOrder(parity, x_cb, 0, c) = rnd_val; 
+           }
+       }
+     }
+  }
+
+  void generic2DSource(cpuColorSpinorField &a) {
+
+    if(a.Nspin() == 4) errorQuda("\nUnsupported spin\n");
+
+    if (a.Precision() == QUDA_DOUBLE_PRECISION) {
+      if     ( a.Nspin() == 1 ) generate2DU1Vector<double, 1>(a, rn_gen);
+      else if( a.Nspin() == 2 ) generate2DU1Vector<double, 2>(a, rn_gen);
+    } else if (a.Precision() == QUDA_SINGLE_PRECISION) {
+  
+      if     ( a.Nspin() == 1 ) generate2DU1Vector<float, 1>(a, rn_gen);
+      else if( a.Nspin() == 2 ) generate2DU1Vector<float, 2>(a, rn_gen);
+      
+    } else {
+      errorQuda("Precision not supported");
+    }
+
   }
 
 } // namespace quda

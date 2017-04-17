@@ -121,7 +121,13 @@ namespace quda {
     // compute initial residual
     mat(r, x, y, tmp3);
     double r2 = blas::xmyNorm(b, r);
-    if (b2 == 0) {
+//    if (b2 == 0) {
+//      b2 = r2;
+//    }
+
+    if(param.compute_null_vector == QUDA_COMPUTE_NULL_VECTOR_YES)
+    {
+      b = r;
       b2 = r2;
     }
 

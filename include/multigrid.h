@@ -11,6 +11,8 @@
 #define GPU_MULTIGRID_DOUBLE
 #endif
 
+#define STAGGERED_NORM_MULTIGRID
+
 namespace quda {
 
   // forward declarations
@@ -352,6 +354,20 @@ namespace quda {
 		double kappa, double mu, double mu_factor, QudaDiracType dirac, QudaMatPCType matpc);
 
   /**
+     @brief Coarse operator construction from a fine-grid operator Staggered
+     @param Y[out] Coarse link field
+     @param X[out] Coarse clover field
+     @param Xinv[out] Coarse clover inverse field
+     @param Yhat[out] Preconditioned coarse link field
+     @param T[in] Transfer operator that defines the coarse space
+     @param fat_links[in] Gauge field from fine grid
+     @param long_links[in] Gauge field from fine grid
+   */
+
+  void CoarseKSOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T, const cudaGaugeField *fat_links, const cudaGaugeField *long_links, double mass, QudaDiracType dirac, QudaMatPCType matpc);
+
+
+  /**
      @brief Coarse operator construction from an intermediate-grid operator (Coarse)
      @param Y[out] Coarse link field
      @param X[out] Coarse clover field
@@ -374,6 +390,14 @@ namespace quda {
 		      double kappa, double mu, double mu_factor, QudaDiracType dirac, QudaMatPCType matpc);
 
   /**
+     KS version of the above, in fact, just identical function
+  */
+  void CoarseCoarseKSOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T,
+                      const GaugeField &coarse_links, const GaugeField &coarse_clover, const GaugeField &coarse_cloverInv,
+                      double mass, QudaDiracType dirac, QudaMatPCType matpc);
+
+
+  /**
      This is an object that captures an entire MG preconditioner
      state.  A bit of a hack at the moment, this is used to allow us
      to store and reuse the mg solver between solves.  This is use by
@@ -383,11 +407,15 @@ namespace quda {
     Dirac *d;
     Dirac *dSmooth;
     Dirac *dSmoothSloppy;
-
+#ifndef STAGGERED_NORM_MULTIGRID
     DiracM *m;
     DiracM *mSmooth;
     DiracM *mSmoothSloppy;
-
+#else //for normal staggered only!
+    DiracMdagM *m;
+    DiracMdagM *mSmooth;
+    DiracMdagM *mSmoothSloppy;
+#endif
     std::vector<ColorSpinorField*> B;
 
     MGParam *mgParam;

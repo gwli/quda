@@ -1,5 +1,6 @@
 #include <dirac_quda.h>
 #include <blas_quda.h>
+#include <multigrid.h>
 
 namespace quda {
 
@@ -139,6 +140,22 @@ namespace quda {
     // do nothing
   }
 
+  /* Creates the coarse grid dirac operator
+  Takes: multigrid transfer class, which knows
+  about the coarse grid blocking, as well as
+  having prolongate and restrict member functions
+  
+  Returns: Color matrices Y[0..2*dim] corresponding
+  to the coarse grid operator.  The first 2*dim
+  matrices correspond to the forward/backward
+  hopping terms on the coarse grid.  X[2*dim] is
+  the color matrix that is diagonal on the coarse
+  grid , this one is trivial but let's keep it for the moment
+  */
+
+  void DiracImprovedStaggered::createCoarseOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T) const {
+    CoarseKSOp(Y, X, Xinv, Yhat, T, &fatGauge, &longGauge,  2*mass, QUDA_ASQTAD_DIRAC, QUDA_MATPC_INVALID);//
+  }
 
   DiracImprovedStaggeredPC::DiracImprovedStaggeredPC(const DiracParam &param)
     : DiracImprovedStaggered(param)

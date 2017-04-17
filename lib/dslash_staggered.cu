@@ -160,6 +160,8 @@ namespace quda {
     dslashParam.gauge_stride = gauge.Stride();
     dslashParam.fat_link_max = gauge.LinkMax(); // May need to use this in the preconditioning step 
     // in the solver for the improved staggered action
+    //experimental for U1 emulation:
+    dslashParam.staggered_u1_emulation = gauge.StaggeredU1Emulation() ? 1 : 0;
 
     for(int i=0;i<4;i++){
       dslashParam.ghostDim[i] = commDimPartitioned(i); // determines whether to use regular or ghost indexing at boundary

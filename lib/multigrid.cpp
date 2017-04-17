@@ -38,8 +38,13 @@ namespace quda {
 
     createSmoother();
 
+#ifndef STAGGERED_NORM_MULTIGRID
     if (param.coarse_grid_solution_type == QUDA_MATPC_SOLUTION && param.smoother_solve_type != QUDA_DIRECT_PC_SOLVE)
+#else
+    if (param.coarse_grid_solution_type == QUDA_MATPC_SOLUTION && (param.smoother_solve_type != QUDA_DIRECT_PC_SOLVE && param.smoother_solve_type != QUDA_NORMOP_PC_SOLVE))
+#endif
       errorQuda("Cannot use preconditioned coarse grid solution without preconditioned smoother solve");
+
 
     // create residual vectors
     {
@@ -53,10 +58,16 @@ namespace quda {
 	csParam.setPrecision(csParam.precision);
 	csParam.gammaBasis = param.level > 0 ? QUDA_DEGRAND_ROSSI_GAMMA_BASIS: QUDA_UKQCD_GAMMA_BASIS;
       }
+      if(param.B[0]->Nspin() == 1)  csParam.gammaBasis = param.B[0]->GammaBasis();//NEW:We need this hack for staggered.
+
       r = ColorSpinorField::Create(csParam);
 
       // if we're using preconditioning then allocate storate for the preconditioned source vector
+#ifndef STAGGERED_NORM_MULTIGRID
       if (param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE) {
+#else
+      if (param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE || param.smoother_solve_type == QUDA_NORMOP_PC_SOLVE) {
+#endif
 	csParam.x[0] /= 2;
 	csParam.siteSubset = QUDA_PARITY_SITE_SUBSET;
 	b_tilde = ColorSpinorField::Create(csParam);
@@ -74,6 +85,14 @@ namespace quda {
       for (int i=0; i<QUDA_MAX_MG_LEVEL; i++) param.mg_global.geo_block_size[param.level][i] = param.geoBlockSize[i];
 
       //transfer->setTransferGPU(false); // use this to force location of transfer
+#ifdef STAGGERED_NORM_MULTIGRID
+      if(param.location == QUDA_CPU_FIELD_LOCATION) transfer->setTransferGPU(false); // use this to force location of transfer
+      if(matpc_type == QUDA_MATPC_EVEN_EVEN || matpc_type == QUDA_MATPC_EVEN_EVEN_ASYMMETRIC || matpc_type == QUDA_MATPC_ODD_ODD || matpc_type == QUDA_MATPC_ODD_ODD_ASYMMETRIC) 
+      {
+        warningQuda("\nCreating parity transfer operator!\n");
+        transfer->setSiteSubset(QUDA_FULL_SITE_SUBSET , (matpc_type == QUDA_MATPC_EVEN_EVEN || matpc_type == QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) ? QUDA_EVEN_PARITY : QUDA_INVALID_PARITY);
+      }
+#endif
       printfQuda("end creating transfer operator\n");
 
       // create coarse residual vector
@@ -341,9 +360,14 @@ namespace quda {
     for (int i=0; i<param.Nvec; i++) {
       // as well as copying to the correct location this also changes basis if necessary
       *tmp1 = *param.B[i]; 
-
+#ifndef STAGGERED_NORM_MULTIGRID
       transfer->R(*r_coarse, *tmp1);
       transfer->P(*tmp2, *r_coarse);
+#else
+      transfer->R(*r_coarse, tmp1->Even());
+      transfer->P(tmp2->Even(), *r_coarse);
+      zero(tmp2->Odd());
+#endif
 
       printfQuda("Vector %d: norms v_k = %e P^\\dagger v_k = %e P P^\\dagger v_k = %e\n",
 		 i, norm2(*tmp1), norm2(*r_coarse), norm2(*tmp2));
@@ -839,5 +863,12 @@ namespace quda {
 
     return;
   }
+
+//HACK!
+  void CoarseKSOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T, const cudaGaugeField *fat_links, const cudaGaugeField *long_links, double mass, QudaDiracType dirac, QudaMatPCType matpc) { }
+
+  void CoarseCoarseKSOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T,
+                      const GaugeField &coarse_links, const GaugeField &coarse_clover, const GaugeField &coarse_cloverInv,
+                      double mass, QudaDiracType dirac, QudaMatPCType matpc) { }
 
 }

@@ -5,6 +5,9 @@
 #include <typeinfo>
 #include <multigrid_helper.cuh>
 
+#define STAGGERED_PARITY_RESTRICTOR
+#define RESTRICTOR_DEBUG
+
 // enabling CTA swizzling improves spatial locality of MG blocks reducing cache line wastage
 #define SWIZZLE
 
@@ -34,7 +37,11 @@ namespace quda {
 		const int *fine_to_coarse, const int *coarse_to_fine, int parity)
       : out(out), in(in), V(V), fine_to_coarse(fine_to_coarse), coarse_to_fine(coarse_to_fine),
 	spin_map(), parity(parity), nParity(in.SiteSubset()), swizzle(1)
-    { }
+    { 
+#ifdef STAGGERED_PARITY_RESTRICTOR
+      if(parity != 0 && this->in.Nparity() != 1) errorQuda("\nStaggered does not support full parity.\n"); 
+#endif 
+    }
 
     RestrictArg(const RestrictArg<Float,fineSpin,fineColor,coarseSpin,coarseColor,order> &arg) :
       out(arg.out), in(arg.in), V(arg.V), 
@@ -114,7 +121,11 @@ namespace quda {
 	  for (int s=0; s<fineSpin; s++) {
 	    for (int coarse_color_local=0; coarse_color_local<coarse_colors_per_thread; coarse_color_local++) {
 	      int c = coarse_color_block + coarse_color_local;
+#ifndef STAGGERED_PARITY_RESTRICTOR
 	      arg.out(parity_coarse,x_coarse_cb,arg.spin_map(s),c) += tmp[s*coarse_colors_per_thread+coarse_color_local];
+#else
+	      arg.out(parity_coarse,x_coarse_cb,0,c) += tmp[coarse_color_local];//only single parity
+#endif
 	    }
 	  }
 
@@ -205,7 +216,12 @@ namespace quda {
     // first lets coarsen spin locally
     for (int s=0; s<fineSpin; s++) {
       for (int v=0; v<coarse_colors_per_thread; v++) {
+#ifndef STAGGERED_PARITY_RESTRICTOR
 	reduced[arg.spin_map(s)*coarse_colors_per_thread+v] += tmp[s*coarse_colors_per_thread+v];
+#else
+	reduced[v] += tmp[v];
+	reduced[coarse_colors_per_thread+v] = 0.0;
+#endif
       }
     }
 
@@ -298,6 +314,10 @@ namespace quda {
 	  } else if (block_size == 16) {  // for 4x2x2x2 aggregates
 	    RestrictKernel<Float,fineSpin,fineColor,coarseSpin,coarseColor,coarse_colors_per_thread,Arg,16>
 	      <<<tp.grid, tp.block, tp.shared_bytes, stream>>>(arg);
+	 } else if (block_size == 32) {  // for 4x4x2x2 aggregates
+	    RestrictKernel<Float,fineSpin,fineColor,coarseSpin,coarseColor,coarse_colors_per_thread,Arg,32>
+	      <<<tp.grid, tp.block, tp.shared_bytes, stream>>>(arg);
+#ifdef RESTRICTOR_DEBUG
 	  } else if (block_size == 27) {  // for 3x3x3x2 aggregates
 	    RestrictKernel<Float,fineSpin,fineColor,coarseSpin,coarseColor,coarse_colors_per_thread,Arg,27>
 	      <<<tp.grid, tp.block, tp.shared_bytes, stream>>>(arg);
@@ -333,6 +353,7 @@ namespace quda {
 	    RestrictKernel<Float,fineSpin,fineColor,coarseSpin,coarseColor,coarse_colors_per_thread,Arg,500>
 	      <<<tp.grid, tp.block, tp.shared_bytes, stream>>>(arg);
 #endif
+#endif //RESTRICTOR_DEBUG 
 	  } else {
 	    errorQuda("Block size %d not instantiated", block_size);
 	  }
@@ -435,11 +456,12 @@ namespace quda {
     if (out.Nspin() != 2) errorQuda("Unsupported nSpin %d", out.Nspin());
     const int coarseSpin = 2;
 
+#ifndef STAGGERED_PARITY_RESTRICTOR
     // first check that the spin_map matches the spin_mapper
     spin_mapper<fineSpin,coarseSpin> mapper;
     for (int s=0; s<fineSpin; s++) 
       if (mapper(s) != spin_map[s]) errorQuda("Spin map does not match spin_mapper");
-
+#endif
 
     // Template over fine color
     if (in.Ncolor() == 3) { // standard QCD
@@ -455,6 +477,7 @@ namespace quda {
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }
+#ifdef RESTRICTOR_DEBUG
     } else if (in.Ncolor() == 2) {
       const int fineColor = 2;
       if (nVec == 2) { // these are probably only for debugging only
@@ -480,6 +503,7 @@ namespace quda {
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }
+#endif
     } else {
       errorQuda("Unsupported nColor %d", in.Ncolor());
     }

@@ -143,6 +143,7 @@ namespace quda {
     static Dirac* create(const DiracParam &param);
 
     double Kappa() const { return kappa; }
+    double Mass() const { return mass; }
     virtual double Mu() const { return 0.; }
     virtual double MuFactor() const { return 0.; }
 
@@ -663,6 +664,18 @@ namespace quda {
 			 const QudaSolutionType) const;
     virtual void reconstruct(ColorSpinorField &x, const ColorSpinorField &b,
 			     const QudaSolutionType) const;
+
+   /**
+    * @brief Create the coarse operator (virtual parent)
+    *
+    * @param Y[out] Coarse link field
+    * @param X[out] Coarse clover field
+    * @param Xinv[out] Coarse clover inverse field
+    * @param Yhat[out] Coarse preconditioned link field
+    * @param T[in] Transfer operator defining the coarse grid
+    */
+    virtual void createCoarseOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T, double mass, double mu=0., double mu_factor=0.) const;
+
   };
 
   // Even-odd preconditioned staggered
@@ -714,6 +727,17 @@ namespace quda {
 			 const QudaSolutionType) const;
     virtual void reconstruct(ColorSpinorField &x, const ColorSpinorField &b,
 			     const QudaSolutionType) const;
+
+   /**
+    * @brief Create the coarse operator (virtual parent)
+    *
+    * @param Y[out] Coarse link field
+    * @param X[out] Coarse clover field
+    * @param Xinv[out] Coarse clover inverse field
+    * @param Yhat[out] Coarse preconditioned link field
+    * @param T[in] Transfer operator defining the coarse grid
+    */
+    virtual void createCoarseOp(GaugeField &Y, GaugeField &X, GaugeField &Xinv, GaugeField &Yhat, const Transfer &T, double mass, double mu=0., double mu_factor=0.) const;
   };
 
   // Even-odd preconditioned staggered

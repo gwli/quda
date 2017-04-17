@@ -21,6 +21,7 @@ namespace quda {
     compute_fat_link_max(false),
     staggeredPhaseType(u.StaggeredPhase()),
     staggeredPhaseApplied(u.StaggeredPhaseApplied()),
+    staggered_u1_emulation(u.StaggeredU1Emulation()),
     i_mu(u.iMu()) { }
 
 
@@ -31,7 +32,7 @@ namespace quda {
     order(param.order), fixed(param.fixed), link_type(param.link_type), t_boundary(param.t_boundary), 
     anisotropy(param.anisotropy), tadpole(param.tadpole), fat_link_max(0.0), scale(param.scale),  
     create(param.create),
-    staggeredPhaseType(param.staggeredPhaseType), staggeredPhaseApplied(param.staggeredPhaseApplied), i_mu(param.i_mu)
+    staggeredPhaseType(param.staggeredPhaseType), staggeredPhaseApplied(param.staggeredPhaseApplied), staggered_u1_emulation(param.staggered_u1_emulation), i_mu(param.i_mu)
   {
     if (link_type != QUDA_COARSE_LINKS && nColor != 3)
       errorQuda("nColor must be 3, not %d for this link type", nColor);
@@ -244,6 +245,7 @@ namespace quda {
     output << "geometry = " << param.geometry << std::endl;
     output << "staggeredPhaseType = " << param.staggeredPhaseType << std::endl;
     output << "staggeredPhaseApplied = " << param.staggeredPhaseApplied << std::endl;
+    output << "staggered 2d U1 emulator = " << param.staggered_u1_emulation << std::endl;
 
     return output;  // for multiple << operators.
   }

@@ -5,6 +5,9 @@
 #include <vector>
 #include <assert.h>
 
+#define STAGGERED_TRANSFER
+#define TRANSFER_DEBUG
+
 namespace quda {
 
   using namespace quda::colorspinor;
@@ -120,10 +123,12 @@ namespace quda {
       FillV<Float,nSpin,nColor,20>(V,B);
     } else if (Nvec == 24) {
       FillV<Float,nSpin,nColor,24>(V,B);
+#define TRANSFER_DEBUG
     } else if (Nvec == 32) {
       FillV<Float,nSpin,nColor,32>(V,B);
     } else if (Nvec == 48) {
       FillV<Float,nSpin,nColor,48>(V,B);
+#endif
     } else {
       errorQuda("Unsupported Nvec %d", Nvec);
     }
@@ -233,8 +238,11 @@ namespace quda {
 	                            blockOffset * spin_bs * in.Ncolor() + // local geometry
 	                                          blockSpin*in.Ncolor() + // block spin
 	                                                                   c;   // color
-
+#ifndef STAGGERED_TRANSFER
 	      if (toBlock) out[index] = in(parity, x_cb, s, c, v); // going to block order
+#else
+	      if (toBlock) out[index] = parity == 0 ? in(parity, x_cb, s, c, v) : 0.0; // going to block order
+#endif
 	      else in(parity, x_cb, s, c, v) = out[index]; // coming from block order
 	    
 	      check[count++] = index;
@@ -261,80 +269,6 @@ namespace quda {
     */
     delete []check;
   }
-
-
-  // Creates a block-ordered version of a ColorSpinorField, with parity blocking (for staggered fields)
-  // N.B.: same as above but parity are separated.
-  template <bool toBlock, int nVec, class Complex, class FieldOrder>
-  void blockCBOrderV(Complex *out, FieldOrder &in,
-		     const int *geo_map, const int *geo_bs, int spin_bs,
-		     const cpuColorSpinorField &V) {
-    //Compute the size of each block
-    int geoBlockSize = 1;
-    for (int d=0; d<in.Ndim(); d++) geoBlockSize *= geo_bs[d];
-    int blockSize = geoBlockSize * in.Ncolor(); // blockSize includes internal dof
-
-    int x[QUDA_MAX_DIM]; // global coordinates
-    int y[QUDA_MAX_DIM]; // local coordinates within a block (full site ordering)
-
-    int checkLength = in.Nparity() * in.VolumeCB() * in.Ncolor() * in.Nvec();
-    int *check = new int[checkLength];
-    int count = 0;
-
-    // Run through the fine grid and do the block ordering
-    for (int parity = 0; parity<in.Nparity(); parity++) {
-      for (int x_cb=0; x_cb<in.VolumeCB(); x_cb++) {
-	int i = parity*in.VolumeCB() + x_cb;
-
-	// Get fine grid coordinates
-	V.LatticeIndex(x, i);
-
-	//Compute the geometric offset within a block 
-	// (x fastest direction, t is slowest direction, non-parity ordered)
-	int blockOffset = 0;
-	for (int d=in.Ndim()-1; d>=0; d--) {
-	  y[d] = x[d]%geo_bs[d];
-	  blockOffset *= geo_bs[d];
-	  blockOffset += y[d];
-	}
-
-	//Take the block-ordered offset from the coarse grid offset (geo_map) 
-	//A.S.: geo_map introduced for the full site ordering, so ok to use it for the offset
-	int offset = geo_map[i]*nVec*geoBlockSize*in.Ncolor();
-
-	const int s = 0;
-
-	for (int v=0; v<in.Nvec(); v++) {
-	  for (int c=0; c<in.Ncolor(); c++) {
-
-	    int chirality = (x[0]+x[1]+x[2]+x[3])%2; // chirality is the fine-grid parity flag
-
-	    int index = offset +                                // geo block
-	      chirality * nVec * geoBlockSize * in.Ncolor() + // chiral block
-	                     v * geoBlockSize * in.Ncolor() + // vector
-	                          blockOffset * in.Ncolor() + // local geometry
-	                                                       c;   // color
-
-	    if (toBlock) out[index] = in(parity, x_cb, s, c, v); // going to block order
-	    else in(parity, x_cb, s, c, v) = out[index]; // coming from block order
-
-	    check[count++] = index;
-	  }
-	}
-
-	//printf("blockOrderV done %d / %d\n", i, in.Volume());
-      } // x_cb
-    } // parity
-
-    if (count != checkLength) {
-      errorQuda("Number of elements packed %d does not match expected value %d nvec=%d ncolor=%d", 
-		count, checkLength, in.Nvec(), in.Ncolor());
-    }
-
-    delete []check;
-  }
-
-
 
 
   // Orthogonalise the nc vectors v[] of length n
@@ -540,7 +474,7 @@ namespace quda {
     }
 
   }
-#endif
+#endif //end
 
     template<typename Float, int nSpin, int nColor, int nVec>
   void BlockOrthogonalize(ColorSpinorField &V, const int *geo_bs, const int *geo_map, int spin_bs) {
@@ -556,7 +490,7 @@ namespace quda {
       for (int d = 0; d < V.Ndim(); d++) geo_blocksize *= geo_bs[d];
 
       int blocksize = geo_blocksize * vOrder.Ncolor() * spin_bs;
-      int chiralBlocks = (V.Nspin() == 1) ? 2 : vOrder.Nspin() / spin_bs; //always 2 for staggered.
+      int chiralBlocks = (V.Nspin() == 1) ? 1 : vOrder.Nspin() / spin_bs; //always 1 for parity staggered (!).
       int numblocks = (V.Volume()/geo_blocksize) * chiralBlocks;
       if (V.Nspin() == 1) blocksize /= chiralBlocks; //for staggered chiral block size is a parity block size
     
@@ -623,10 +557,12 @@ namespace quda {
       BlockOrthogonalize<Float,nSpin,16>(V, Nvec, geo_bs, geo_map, spin_bs);
     } else if (V.Ncolor()/Nvec == 24) {
       BlockOrthogonalize<Float,nSpin,24>(V, Nvec, geo_bs, geo_map, spin_bs);
+#ifdef TRANSFER_DEBUG
     } else if (V.Ncolor()/Nvec == 32) {
       BlockOrthogonalize<Float,nSpin,32>(V, Nvec, geo_bs, geo_map, spin_bs);
     } else if (V.Ncolor()/Nvec == 48) {
       BlockOrthogonalize<Float,nSpin,48>(V, Nvec, geo_bs, geo_map, spin_bs); //for staggered, even-odd blocking presumed
+#endif
     }  
     else {
       errorQuda("Unsupported nColor %d\n", V.Ncolor()/Nvec);

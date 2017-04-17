@@ -203,6 +203,14 @@ namespace quda {
 	QUDA_FLOAT2_FIELD_ORDER : QUDA_FLOAT4_FIELD_ORDER;
     }
 
+    /**
+    * 
+    * Currently, staggered multigrid does not work with 5-d fields, this is needed to convert 5-d into 4-d field and vice versa
+    */
+
+    void reduceDimensionality() { nDim--; }
+    void extendDimensionality() { nDim++; x[nDim-1] = 1; }
+
     void print() {
       printfQuda("nColor = %d\n", nColor);
       printfQuda("nSpin = %d\n", nSpin);
@@ -800,6 +808,9 @@ namespace quda {
       QudaFieldLocation location, const int parity, void *Dst, void *Src, void *dstNorm, void *srcNorm);
 
   void genericPackGhost(void **ghost, const ColorSpinorField &a, const QudaParity parity, const int dagger);
+
+  //2d code:
+  void generic2DSource(cpuColorSpinorField &a);
 
 } // namespace quda
 

@@ -5,6 +5,9 @@
 
 #include <multigrid_helper.cuh>
 
+#define STAGGERED_PARITY_PROLONGATOR
+#define PROLONGATOR_DEBUG
+
 namespace quda {
 
 #ifdef GPU_MULTIGRID
@@ -25,7 +28,12 @@ namespace quda {
 
     ProlongateArg(ColorSpinorField &out, const ColorSpinorField &in, const ColorSpinorField &V,
 		  const int *geo_map,  const int parity)
-      : out(out), in(in), V(V), geo_map(geo_map), spin_map(), parity(parity), nParity(out.SiteSubset()) { }
+      : out(out), in(in), V(V), geo_map(geo_map), spin_map(), parity(parity), nParity(out.SiteSubset()) 
+    {
+#ifdef STAGGERED_PARITY_PROLONGATOR
+      if(parity != 0 && this->out.Nparity() != 1) errorQuda("\nStaggered does not support full parity.\n"); 
+#endif 
+    }
 
     ProlongateArg(const ProlongateArg<Float,fineSpin,fineColor,coarseSpin,coarseColor,order> &arg)
       : out(arg.out), in(arg.in), V(arg.V), geo_map(arg.geo_map), spin_map(),
@@ -47,7 +55,11 @@ namespace quda {
     for (int s=0; s<fineSpin; s++) {
 #pragma unroll
       for (int c=0; c<coarseColor; c++) {
+#ifndef STAGGERED_PARITY_PROLONGATOR
 	out[s*coarseColor+c] = in(parity_coarse, x_coarse_cb, spin_map(s), c);
+#else
+	out[c] = in(parity_coarse, x_coarse_cb, 0, c);//we map only coarse_spin = 0, s=0 for staggered! 
+#endif
       }
     }
   }
@@ -214,10 +226,12 @@ namespace quda {
     if (in.Nspin() != 2) errorQuda("Coarse spin %d is not supported", in.Nspin());
     const int coarseSpin = 2;
 
+#ifndef STAGGERED_PARITY_PROLONGATOR
     // first check that the spin_map matches the spin_mapper
     spin_mapper<fineSpin,coarseSpin> mapper;
     for (int s=0; s<fineSpin; s++) 
       if (mapper(s) != spin_map[s]) errorQuda("Spin map does not match spin_mapper");
+#endif
 
     if (out.Ncolor() == 3) {
       const int fineColor = 3;
@@ -232,6 +246,7 @@ namespace quda {
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }
+#ifdef PROLONGATOR_DEBUG
     } else if (out.Ncolor() == 2) {
       const int fineColor = 2;
       if (nVec == 2) { // these are probably only for debugging only
@@ -241,12 +256,15 @@ namespace quda {
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }
+#endif
     } else if (out.Ncolor() == 24) {
       const int fineColor = 24;
       if (nVec == 24) { // to keep compilation under control coarse grids have same or more colors
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,24>(out, in, v, fine_to_coarse, parity);
+#ifdef PROLONGATOR_DEBUG
       } else if (nVec == 32) {
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,32>(out, in, v, fine_to_coarse, parity);
+#endif
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }

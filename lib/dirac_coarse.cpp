@@ -2,6 +2,18 @@
 #include <multigrid.h>
 #include <algorithm>
 
+#ifndef STAGGERED_NORM_MULTIGRID
+  const bool staggered_dslash_emulation    = false;
+  const bool coarsecoarse_dslash_emulation = false;
+#else
+  const bool staggered_dslash_emulation    = true;
+  const bool coarsecoarse_dslash_emulation = true;
+#endif
+  //Some extra parameters:
+  const bool single_parity_application = true;
+  const bool cg_mdagm_operator         = true;
+  const bool fg_mdagm_operator         = true;
+
 namespace quda {
 
   DiracCoarse::DiracCoarse(const DiracParam &param, bool enable_gpu)
@@ -60,7 +72,8 @@ namespace quda {
     int Nc_c = transfer->nvec();
 
     //Coarse Spin
-    int Ns_c = transfer->Vectors().Nspin()/transfer->Spin_bs();
+    //int Ns_c = transfer->Vectors().Nspin()/transfer->Spin_bs();
+    int Ns_c = (transfer->Vectors().Nspin() == 1) ? 2 : transfer->Vectors().Nspin()/transfer->Spin_bs();
 
     GaugeFieldParam gParam;
     memcpy(gParam.x, x, QUDA_MAX_DIM*sizeof(int));
@@ -107,6 +120,8 @@ namespace quda {
       X_d = new cudaGaugeField(gParam);
       Xinv_d = new cudaGaugeField(gParam);
     }
+
+    if(staggered_dslash_emulation) return;
 
     bool gpu_setup = true;
 
@@ -186,6 +201,85 @@ namespace quda {
 
   void DiracCoarse::M(ColorSpinorField &out, const ColorSpinorField &in) const
   {
+    bool is_staggered = false;
+    if( typeid(*dirac).name() == typeid(DiracStaggered).name() || typeid(*dirac).name() == typeid(DiracImprovedStaggered).name() || typeid(*dirac).name() == typeid(DiracStaggeredPC).name() || typeid(*dirac).name() == typeid(DiracImprovedStaggeredPC).name() ) is_staggered = true;
+
+    if((is_staggered && staggered_dslash_emulation) || (!is_staggered && coarsecoarse_dslash_emulation))
+    {
+      //@warningQuda("Input norm : %le", blas::norm2(in));
+      if (!enable_gpu) errorQuda("Cannot apply coarse grid operator on GPU since enable_gpu has not been set");
+      const std::vector<ColorSpinorField*> &B = transfer->RawVectors();
+      const ColorSpinorField &tmp3 = *B[0];
+      ColorSpinorParam csParam(tmp3);
+
+      csParam.location = QUDA_CUDA_FIELD_LOCATION;
+      csParam.create = QUDA_ZERO_FIELD_CREATE;
+      csParam.gammaBasis = tmp3.GammaBasis();
+      csParam.fieldOrder = QUDA_FLOAT2_FIELD_ORDER;
+      //horrible hack: fix it!
+
+      if(single_parity_application && csParam.siteSubset == QUDA_FULL_SITE_SUBSET)
+      {
+        csParam.siteSubset = QUDA_PARITY_SITE_SUBSET;
+        csParam.x[0] /= 2;
+      }
+
+      ColorSpinorField *tmp1 = ColorSpinorField::Create(csParam);
+      ColorSpinorField *tmp2 = ColorSpinorField::Create(csParam);
+
+      //if(is_staggered) csParam.extendDimensionality();
+
+      ColorSpinorField *tmp5 = ColorSpinorField::Create(csParam);
+      ColorSpinorField *tmp6 = ColorSpinorField::Create(csParam);
+
+      transfer->P(*tmp1, in);
+
+      *tmp5 = *tmp1;
+
+      if (cg_mdagm_operator)
+      {
+        if( csParam.siteSubset == QUDA_PARITY_SITE_SUBSET )
+        {
+          dirac->MdagM(*tmp6, *tmp5);
+        }
+        else
+        {
+          dirac->MdagM(tmp6->Even(), tmp5->Even());
+
+          blas::zero(tmp6->Odd());
+          //@blas::ax(4*dirac->Mass()*dirac->Mass(), tmp5->Odd());
+          //@tmp6->Odd() = tmp5->Odd();
+        }
+      }
+      else
+      { 
+//#define HERMITIAN
+        //Non-hermitian version:
+        dirac->M(*tmp6, *tmp5);//WARNING: this may be hermitian, check dirac_staggered.cpp
+
+#ifdef HERMITIAN          
+        blas::ax(-1.0, tmp6->Odd());
+#endif
+        if(fg_mdagm_operator) blas::ax(2*dirac->Mass(), *tmp6);
+      }
+
+      *tmp2 = *tmp6; 
+      //@warningQuda("Output norm : %le", blas::norm2(*tmp2));
+      transfer->R(out, *tmp2);
+      //@warningQuda("Output norm : %le", blas::norm2(out));
+
+      delete tmp5;
+      delete tmp6;
+
+      delete tmp1;
+      delete tmp2;
+
+      return;
+    } else { 
+      if (is_staggered) errorQuda("\nStaggered: emulation mode only!\n");
+    }
+
+
     if ( Location(out, in) == QUDA_CUDA_FIELD_LOCATION ) {
       if (!enable_gpu) errorQuda("Cannot apply %s on GPU since enable_gpu has not been set", __func__);
       ApplyCoarse(out, in, in, *Y_d, *X_d, kappa, QUDA_INVALID_PARITY, true, true, dagger);
