@@ -5,7 +5,7 @@
 #include <vector>
 #include <assert.h>
 
-#define STAGGERED_TRANSFER
+//#define STAGGERED_TRANSFER
 #define TRANSFER_DEBUG
 
 namespace quda {
@@ -123,7 +123,7 @@ namespace quda {
       FillV<Float,nSpin,nColor,20>(V,B);
     } else if (Nvec == 24) {
       FillV<Float,nSpin,nColor,24>(V,B);
-#define TRANSFER_DEBUG
+#ifdef TRANSFER_DEBUG
     } else if (Nvec == 32) {
       FillV<Float,nSpin,nColor,32>(V,B);
     } else if (Nvec == 48) {
