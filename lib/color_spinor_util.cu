@@ -4,6 +4,8 @@
 
 #include <random> 
 
+#define COARSE_SOURCE
+
 namespace quda {
 
   using namespace colorspinor;
@@ -16,6 +18,17 @@ namespace quda {
     for (int parity=0; parity<t.Nparity(); parity++) {
       for (int x_cb=0; x_cb<t.VolumeCB(); x_cb++) {
 	for (int s=0; s<t.Nspin(); s++) {
+#ifdef COARSE_SOURCE
+          if (t.Nspin() == 2 && s == 1) 
+          {
+  	    for (int c=0; c<t.Ncolor(); c++) {
+	      t(parity,x_cb,1,c).real(0.0);
+	      t(parity,x_cb,1,c).imag(0.0);
+            }
+
+            continue;//for staggered only!
+          }
+#endif
 	  for (int c=0; c<t.Ncolor(); c++) {
 	    t(parity,x_cb,s,c).real(comm_drand());
 	    t(parity,x_cb,s,c).imag(comm_drand());

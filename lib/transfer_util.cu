@@ -5,7 +5,7 @@
 #include <vector>
 #include <assert.h>
 
-//#define STAGGERED_TRANSFER
+#define STAGGERED_TRANSFER
 #define TRANSFER_DEBUG
 
 namespace quda {

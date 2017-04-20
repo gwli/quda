@@ -848,7 +848,8 @@ namespace quda {
       for (int x_cb=0; x_cb<arg.coarseVolumeCB; x_cb++) {
         for(int s = 0; s < nSpin; s++) { //Spin
          for(int c = 0; c < nColor; c++) { //Color
-	   arg.X(0,parity,x_cb,s,s,c,c) += static_cast<Float>(1.0);
+	   //arg.X(0,parity,x_cb,s,s,c,c) += static_cast<Float>(1.0);
+           arg.X(0,parity,x_cb,s,s,c,c) += quda::complex<Float>(1.0, 0.0);
          } //Color
         } //Spin
       } // x_cb
@@ -865,7 +866,8 @@ namespace quda {
 
     for(int s = 0; s < nSpin; s++) { //Spin
       for(int c = 0; c < nColor; c++) { //Color
-	arg.X(0,parity,x_cb,s,s,c,c) += static_cast<Float>(1.0);
+	//arg.X(0,parity,x_cb,s,s,c,c) += static_cast<Float>(1.0);
+        arg.X(0,parity,x_cb,s,s,c,c) += quda::complex<Float>(1.0, 0.0);
       } //Color
     } //Spin
    }

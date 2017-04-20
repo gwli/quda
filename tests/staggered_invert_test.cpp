@@ -101,6 +101,12 @@ extern int geo_block_size[QUDA_MAX_MG_LEVEL][QUDA_MAX_DIM];
 
 extern QudaInverterType smoother_type;
 
+extern double mu_factor[QUDA_MAX_MG_LEVEL];
+extern QudaVerbosity mg_verbosity[QUDA_MAX_MG_LEVEL];
+
+extern QudaInverterType setup_inv[QUDA_MAX_MG_LEVEL];
+extern double setup_tol;
+
 extern QudaMatPCType matpc_type;
 extern QudaSolveType solve_type;
 
@@ -244,8 +250,8 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
   inv_param.solution_type = QUDA_MAT_SOLUTION;//fixed
   //inv_param.solution_type = QUDA_MATPC_SOLUTION;//not allowed
 
-  inv_param.solve_type = QUDA_DIRECT_SOLVE;//fixed
-  //inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;//not allowed
+  //inv_param.solve_type = QUDA_DIRECT_SOLVE;//fixed
+  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;//not allowed
 
   mg_param.invert_param = &inv_param;
   mg_param.n_level = mg_levels;
@@ -255,10 +261,16 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
       if(_2d_u1_emulation && j >= 2) mg_param.geo_block_size[i][j] = i == 0 ? latt_dim[j] : 1;  
       mg_param.geo_block_size[i][4] = 1;//to be safe with 5th dimension
     }
+    mg_param.verbosity[i] = mg_verbosity[i];
+    //mg_param.setup_inv_type[i] = setup_inv[i];
+    mg_param.setup_inv_type[i] = QUDA_CG_INVERTER;
+    mg_param.setup_tol[i] = setup_tol;
+
     mg_param.spin_block_size[i] = 1;// 1 or 0 (1 for parity blocking)
     mg_param.n_vec[i] =  nvec[i] == 0 ? ( !_2d_u1_emulation ? 24 : 4 ) : nvec[i]; // default to 24 vectors if not set
     mg_param.nu_pre[i] = 4;//nu_pre;
     mg_param.nu_post[i] = 4;//nu_post;
+    //mg_param.mu_factor[i] = mu_factor[i];
 
     mg_param.cycle_type[i] = QUDA_MG_CYCLE_VCYCLE;//QUDA_MG_CYCLE_RECURSIVE;
 
@@ -287,8 +299,8 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
     //mg_param.location[i] = QUDA_CPU_FIELD_LOCATION;
   }
 
-  mg_param.smoother_solve_type[0] = solve_type == QUDA_NORMOP_PC_SOLVE? QUDA_NORMOP_PC_SOLVE : mg_param.smoother_solve_type[0]; //or choose QUDA_DIRECT_SOLVE;
-  //mg_param.smoother_solve_type[0] = QUDA_NORMOP_PC_SOLVE;//enforce PC solve
+  //mg_param.smoother_solve_type[0] = solve_type == QUDA_NORMOP_PC_SOLVE? QUDA_NORMOP_PC_SOLVE : mg_param.smoother_solve_type[0]; //or choose QUDA_DIRECT_SOLVE;
+  mg_param.smoother_solve_type[0] = QUDA_NORMOP_PC_SOLVE;//enforce NORMOPPC solve
   // coarsen the spin on the first restriction is undefined for staggered fields
   mg_param.spin_block_size[0] = 0;
 
@@ -445,7 +457,7 @@ set_params(QudaGaugeParam* gaugeParam, QudaInvertParam* inv_param,
 
   inv_param->dslash_type = dslash_type;
 
-  inv_param->sp_pad = X1*X2*X3/2;
+  inv_param->sp_pad = 0;
   inv_param->use_init_guess = QUDA_USE_INIT_GUESS_YES;
 
   inv_param->input_location = QUDA_CPU_FIELD_LOCATION;

@@ -24,7 +24,7 @@ static char partition_string[16] = ",comm=";
 // While we can emulate an all-gather using QMP reductions, this
 // scales horribly as the number of nodes increases, so for
 // performance we just call MPI directly
-#define USE_MPI_GATHER
+//#define USE_MPI_GATHER
 
 #ifdef USE_MPI_GATHER
 #include <mpi.h>

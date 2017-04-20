@@ -265,6 +265,7 @@ namespace quda{
   template<typename Float>
   void ArpackArgs<Float>::apply( )
   {
+#ifdef ARPACK_LIB
     int *fcomm = nullptr;
 #ifdef MULTI_GPU
     MPI_Fint mpi_comm_fort = MPI_Comm_c2f(MPI_COMM_WORLD);
@@ -344,7 +345,7 @@ namespace quda{
 
     if (w_workd_ != nullptr)   delete [] w_workd_;
     if (resid_   != nullptr)   delete [] resid_;
-
+#endif
     return;
   }
 

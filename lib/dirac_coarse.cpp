@@ -62,7 +62,8 @@ namespace quda {
   void DiracCoarse::initializeCoarse()
   {
     QudaPrecision prec = transfer->Vectors().Precision();
-    int ndim = transfer->Vectors().Ndim();
+    //int ndim = transfer->Vectors().Ndim();
+    int ndim = transfer->Vectors().Ndim() == 5 ? 4 : transfer->Vectors().Ndim();
     int x[QUDA_MAX_DIM];
     //Number of coarse sites.
     const int *geo_bs = transfer->Geo_bs();
@@ -229,24 +230,19 @@ namespace quda {
 
       //if(is_staggered) csParam.extendDimensionality();
 
-      ColorSpinorField *tmp5 = ColorSpinorField::Create(csParam);
-      ColorSpinorField *tmp6 = ColorSpinorField::Create(csParam);
-
       transfer->P(*tmp1, in);
-
-      *tmp5 = *tmp1;
 
       if (cg_mdagm_operator)
       {
         if( csParam.siteSubset == QUDA_PARITY_SITE_SUBSET )
         {
-          dirac->MdagM(*tmp6, *tmp5);
+          dirac->MdagM(*tmp2, *tmp1);
         }
         else
         {
-          dirac->MdagM(tmp6->Even(), tmp5->Even());
+          dirac->MdagM(tmp2->Even(), tmp1->Even());
 
-          blas::zero(tmp6->Odd());
+          blas::zero(tmp2->Odd());
           //@blas::ax(4*dirac->Mass()*dirac->Mass(), tmp5->Odd());
           //@tmp6->Odd() = tmp5->Odd();
         }
@@ -255,21 +251,17 @@ namespace quda {
       { 
 //#define HERMITIAN
         //Non-hermitian version:
-        dirac->M(*tmp6, *tmp5);//WARNING: this may be hermitian, check dirac_staggered.cpp
+        dirac->M(*tmp2, *tmp1);//WARNING: this may be hermitian, check dirac_staggered.cpp
 
 #ifdef HERMITIAN          
-        blas::ax(-1.0, tmp6->Odd());
+        blas::ax(-1.0, tmp2->Odd());
 #endif
-        if(fg_mdagm_operator) blas::ax(2*dirac->Mass(), *tmp6);
+        if(fg_mdagm_operator) blas::ax(2*dirac->Mass(), *tmp2);
       }
 
-      *tmp2 = *tmp6; 
       //@warningQuda("Output norm : %le", blas::norm2(*tmp2));
       transfer->R(out, *tmp2);
       //@warningQuda("Output norm : %le", blas::norm2(out));
-
-      delete tmp5;
-      delete tmp6;
 
       delete tmp1;
       delete tmp2;

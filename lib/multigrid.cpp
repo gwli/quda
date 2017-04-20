@@ -364,6 +364,7 @@ namespace quda {
       transfer->R(*r_coarse, *tmp1);
       transfer->P(*tmp2, *r_coarse);
 #else
+      if(norm2(tmp1->Odd()) != 0) errorQuda("Null vector odd parity norm is non-zero.\n");
       transfer->R(*r_coarse, tmp1->Even());
       transfer->P(tmp2->Even(), *r_coarse);
       zero(tmp2->Odd());
@@ -395,10 +396,23 @@ namespace quda {
 
     printfQuda("\n");
     printfQuda("Checking 0 = (1 - P^\\dagger P) eta_c\n");
+
+#ifndef STAGGERED_NORM_MULTIGRID
     x_coarse->Source(QUDA_RANDOM_SOURCE);
     transfer->P(*tmp2, *x_coarse);
     transfer->R(*r_coarse, *tmp2);
+
     printfQuda("Vector norms %e %e (fine tmp %e) ", norm2(*x_coarse), norm2(*r_coarse), norm2(*tmp2));
+#else
+    zero(*x_coarse);
+    zero(*r_coarse);
+    x_coarse->Source(QUDA_RANDOM_SOURCE);
+    transfer->P(tmp2->Even(), *x_coarse);
+    transfer->R(*r_coarse, tmp2->Even());
+
+//bug!    printfQuda("Vector norms %1.8e %1.8e (fine tmp %1.8e) %1.8le \n", norm2(*x_coarse), norm2(*r_coarse), norm2(*tmp2), xmyNorm(*x_coarse, *r_coarse));
+    printfQuda("Vector norms %1.8e %1.8e (fine tmp %1.8e)\n", norm2(*x_coarse), norm2(*r_coarse), norm2(*tmp2));
+#endif
 
     deviation = sqrt( xmyNorm(*x_coarse, *r_coarse) / norm2(*x_coarse) );
     printfQuda("L2 relative deviation = %e\n", deviation);
@@ -424,7 +438,12 @@ namespace quda {
 	dirac.DslashXpay(tmp2->Odd(), tmp1->Even(), QUDA_ODD_PARITY, tmp1->Odd(), 1.0);
       }
     } else {
+#ifndef STAGGERED_NORM_MULTIGRID
       (*param.matResidual)(*tmp2,*tmp1);
+#else
+      (*param.matResidual)(tmp2->Even(),tmp1->Even());
+      zero(tmp2->Odd());
+#endif
     }
 
     transfer->R(*x_coarse, *tmp2);
@@ -455,7 +474,7 @@ namespace quda {
     }
     printfQuda("L2 relative deviation = %e\n\n", deviation);
     if (deviation > tol) errorQuda("failed");
-    
+#ifndef STAGGERED_NORM_MULTIGRID    
     // here we check that the Hermitian conjugate operator is working
     // as expected for both the smoother and residual Dirac operators
     if (param.coarse_grid_solution_type == QUDA_MATPC_SOLUTION && param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE) {
@@ -486,6 +505,7 @@ namespace quda {
 		 real(dot), imag(dot), deviation);
       if (deviation > tol) errorQuda("failed");
     }
+#endif
 
 #ifdef ARPACK_LIB
     printfQuda("\n");
@@ -564,9 +584,10 @@ namespace quda {
 
     if ( outer_solution_type == QUDA_MATPC_SOLUTION && inner_solution_type == QUDA_MAT_SOLUTION)
       errorQuda("Unsupported solution type combination");
-
+#ifndef STAGGERED_NORM_MULTIGRID
     if ( inner_solution_type == QUDA_MATPC_SOLUTION && param.smoother_solve_type != QUDA_DIRECT_PC_SOLVE)
       errorQuda("For this coarse grid solution type, a preconditioned smoother is required");
+#endif
 
     if ( debug ) printfQuda("entering V-cycle with x2=%e, r2=%e\n", norm2(x), norm2(b));
 
@@ -598,9 +619,15 @@ namespace quda {
       // if using preconditioned smoother then need to reconstruct full residual
       // FIXME extend this check for precision, Schwarz, etc.
       bool use_solver_residual =
+#ifndef STAGGERED_NORM_MULTIGRID
 	( (param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE && inner_solution_type == QUDA_MATPC_SOLUTION) ||
 	  (param.smoother_solve_type == QUDA_DIRECT_SOLVE && inner_solution_type == QUDA_MAT_SOLUTION) )
 	? true : false;
+#else
+	( (param.smoother_solve_type == QUDA_NORMOP_PC_SOLVE && inner_solution_type == QUDA_MATPC_SOLUTION) ||
+	  (param.smoother_solve_type == QUDA_DIRECT_SOLVE && inner_solution_type == QUDA_MAT_SOLUTION) )
+	? true : false;
+#endif
 
       // FIXME this is currently borked if inner solver is preconditioned
       double r2 = 0.0;
@@ -793,7 +820,10 @@ namespace quda {
     csParam.setPrecision(B[0]->Precision());
 
     csParam.location = QUDA_CUDA_FIELD_LOCATION; // hard code to GPU location for null-space generation for now
-    csParam.gammaBasis = QUDA_UKQCD_GAMMA_BASIS;
+
+    if(param.B[0]->Nspin() == 1) csParam.gammaBasis = param.B[0]->GammaBasis();//hack for staggered
+    else csParam.gammaBasis = QUDA_UKQCD_GAMMA_BASIS;
+
     csParam.create = QUDA_ZERO_FIELD_CREATE;
     ColorSpinorField *b = static_cast<ColorSpinorField*>(new cudaColorSpinorField(csParam));
     csParam.create = QUDA_NULL_FIELD_CREATE;
@@ -820,7 +850,18 @@ namespace quda {
 
     // Generate sources and launch solver for each source:
     for(unsigned int i=0; i<B.size(); i++) {
+#ifndef STAGGERED_NORM_MULTIGRID
       B[i]->Source(QUDA_RANDOM_SOURCE); //random initial guess
+#else //STAGGERED
+      if(!param.mg_global._2d_u1_emulation)
+      {
+        B[i]->Source(QUDA_RANDOM_SOURCE); //random initial guess
+      } else {
+        cpuColorSpinorField *curr_nullvec = static_cast<cpuColorSpinorField*> (B[i]);
+        blas::zero(*curr_nullvec);//need this
+        generic2DSource(*curr_nullvec);//??
+      }
+#endif
 
       B_gpu.push_back(ColorSpinorField::Create(csParam));
       ColorSpinorField *x = B_gpu[i];
@@ -830,10 +871,20 @@ namespace quda {
 
       if (getVerbosity() >= QUDA_VERBOSE) printfQuda("Initial guess = %g\n", norm2(*x));
 
+#ifndef STAGGERED_NORM_MULTIGRID
       ColorSpinorField *out=nullptr, *in=nullptr;
       dirac.prepare(in, out, *x, *b, QUDA_MAT_SOLUTION);
       (*solve)(*out, *in);
       dirac.reconstruct(*x, *b, QUDA_MAT_SOLUTION);
+#else
+      Dirac &dirac_tmp = const_cast<Dirac&>(dirac);
+      double init_mass = dirac_tmp.Mass();
+      //@dirac_tmp.setMass(0.0);//1e-4
+
+      (*solve)(x->Even(), b->Even());
+      blas::zero(x->Odd());
+#endif
+
 
       if (getVerbosity() >= QUDA_VERBOSE) printfQuda("Solution = %g\n", norm2(*x));
 
@@ -847,6 +898,9 @@ namespace quda {
       if (nrm2 > 1e-16) ax(1.0 /sqrt(nrm2), *x);
       else errorQuda("\nCannot orthogonalize %u vector\n", i);
 
+#ifdef STAGGERED_NORM_MULTIGRID
+      dirac_tmp.setMass(init_mass);
+#endif
     }
 
     delete solve;

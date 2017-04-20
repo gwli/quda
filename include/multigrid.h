@@ -8,7 +8,7 @@
 
 // at the moment double-precision multigrid is only enabled when debugging
 #ifdef HOST_DEBUG
-#define GPU_MULTIGRID_DOUBLE
+//#define GPU_MULTIGRID_DOUBLE //this won't work, anyway
 #endif
 
 #define STAGGERED_NORM_MULTIGRID

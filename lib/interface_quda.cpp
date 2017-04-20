@@ -2187,7 +2187,11 @@ multigrid_solver::multigrid_solver(QudaMultigridParam &mg_param, TimeProfile &pr
       errorQuda("Unsupported smoother solve type %d on level %d", mg_param.smoother_solve_type[i], i);
   }
   if (param->solve_type != QUDA_DIRECT_SOLVE)
+#ifndef STAGGERED_NORM_MULTIGRID
     errorQuda("Outer MG solver can only use QUDA_DIRECT_SOLVE at present");
+#else
+    warningQuda("Outer MG solver can only use QUDA_DIRECT_SOLVE at present");
+#endif
 
   pushVerbosity(param->verbosity);
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaMultigridParam(&mg_param);
@@ -2268,6 +2272,7 @@ void destroyMultigridQuda(void *mg) {
 }
 
 void updateMultigridQuda(void *mg_, QudaMultigridParam *mg_param) {
+#ifndef STAGGERED_NORM_MULTIGRID
   multigrid_solver *mg = static_cast<multigrid_solver*>(mg_);
 
   QudaInvertParam *param = mg_param->invert_param;
@@ -2319,6 +2324,7 @@ void updateMultigridQuda(void *mg_, QudaMultigridParam *mg_param) {
   //mgParam = new MGParam(mg_param, B, *m, *mSmooth, *mSmoothSloppy);
   //mg = new MG(*mgParam, profile);
   mg->mgParam->updateInvertParam(*param);
+#endif
 }
 
 void invertQuda(void *hp_x, void *hp_b, QudaInvertParam *param)
@@ -2497,7 +2503,11 @@ void invertQuda(void *hp_x, void *hp_b, QudaInvertParam *param)
   }
 
   if (param->inv_type_precondition == QUDA_MG_INVERTER && (!direct_solve || !mat_solution)) {
+#ifndef STAGGERED_NORM_MULTIGRID
     errorQuda("Multigrid preconditioning only supported for direct solves");
+#else
+    warningQuda("Multigrid preconditioning only supported for direct solves");
+#endif
   }
 
   if (param->use_resident_chrono && (direct_solve || norm_error_solve) ){
