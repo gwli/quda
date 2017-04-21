@@ -250,8 +250,8 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
   inv_param.solution_type = QUDA_MAT_SOLUTION;//fixed
   //inv_param.solution_type = QUDA_MATPC_SOLUTION;//not allowed
 
-  //inv_param.solve_type = QUDA_DIRECT_SOLVE;//fixed
-  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;//not allowed
+  inv_param.solve_type = QUDA_DIRECT_SOLVE;//fixed
+  //inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;//not allowed
 
   mg_param.invert_param = &inv_param;
   mg_param.n_level = mg_levels;
@@ -299,8 +299,8 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
     //mg_param.location[i] = QUDA_CPU_FIELD_LOCATION;
   }
 
-  //mg_param.smoother_solve_type[0] = solve_type == QUDA_NORMOP_PC_SOLVE? QUDA_NORMOP_PC_SOLVE : mg_param.smoother_solve_type[0]; //or choose QUDA_DIRECT_SOLVE;
-  mg_param.smoother_solve_type[0] = QUDA_NORMOP_PC_SOLVE;//enforce NORMOPPC solve
+  mg_param.smoother_solve_type[0] = solve_type == QUDA_NORMOP_PC_SOLVE? QUDA_NORMOP_PC_SOLVE : mg_param.smoother_solve_type[0]; //or choose QUDA_DIRECT_SOLVE;
+  //mg_param.smoother_solve_type[0] = QUDA_NORMOP_PC_SOLVE;//enforce PC solve
   // coarsen the spin on the first restriction is undefined for staggered fields
   mg_param.spin_block_size[0] = 0;
 
@@ -457,7 +457,7 @@ set_params(QudaGaugeParam* gaugeParam, QudaInvertParam* inv_param,
 
   inv_param->dslash_type = dslash_type;
 
-  inv_param->sp_pad = 0;
+  inv_param->sp_pad = X1*X2*X3/2;
   inv_param->use_init_guess = QUDA_USE_INIT_GUESS_YES;
 
   inv_param->input_location = QUDA_CPU_FIELD_LOCATION;
