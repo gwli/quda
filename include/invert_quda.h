@@ -926,6 +926,60 @@ namespace quda {
   };
 
 
+ //EXTRA solver
+ 
+ using ColorSpinorFieldSet = ColorSpinorField;
+
+ class FGMResDRArgs;
+
+ class FGMResDR : public Solver {
+
+  private:
+
+    DiracMatrix &mat;
+    DiracMatrix &matSloppy;
+    DiracMatrix &matPrecon;
+
+    Solver *K;
+    SolverParam Kparam; // parameters for preconditioner solve
+
+    ColorSpinorFieldSet *Vm;//arnoldi basis vectors, size (m+1)
+    ColorSpinorFieldSet *Zm;//arnoldi basis vectors, size (m+1)
+
+    ColorSpinorField *rp;       //! residual vector
+    ColorSpinorField *yp;       //! high precision accumulator
+    ColorSpinorField *tmpp;     //! temporary for mat-vec
+    //ColorSpinorField *x_sloppy; //! sloppy solution vector
+    ColorSpinorField *r_sloppy; //! sloppy residual vector
+    ColorSpinorField *r_pre;    //! residual passed to preconditioner
+    ColorSpinorField *p_pre;    //! preconditioner result
+
+    TimeProfile &profile;    //time profile for initCG solver
+
+    FGMResDRArgs *gmresdr_args;
+
+    bool init;
+
+  public:
+
+    FGMResDR(DiracMatrix &mat, DiracMatrix &matSloppy, DiracMatrix &matPrecon, SolverParam &param, TimeProfile &profile);
+    FGMResDR(DiracMatrix &mat, Solver &K, DiracMatrix &matSloppy, DiracMatrix &matPrecon, SolverParam &param, TimeProfile &profile);
+
+    virtual ~FGMResDR();
+
+    //GMRES-DR solver
+    void operator()(ColorSpinorField &out, ColorSpinorField &in);
+    //
+    //FGMResDR method
+    void RunDeflatedCycles (ColorSpinorField *out, ColorSpinorField *in, const double tol_threshold);
+    //
+    int FlexArnoldiProcedure (const int start_idx, const bool do_givens);
+
+    void RestartVZH();
+
+    void UpdateSolution(ColorSpinorField *x, ColorSpinorField *r, bool do_gels);
+
+  };
 
 } // namespace quda
 
