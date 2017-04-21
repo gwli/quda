@@ -58,7 +58,10 @@ namespace quda {
 	csParam.setPrecision(csParam.precision);
 	csParam.gammaBasis = param.level > 0 ? QUDA_DEGRAND_ROSSI_GAMMA_BASIS: QUDA_UKQCD_GAMMA_BASIS;
       }
-      if(param.B[0]->Nspin() == 1)  csParam.gammaBasis = param.B[0]->GammaBasis();//NEW:We need this hack for staggered.
+      if(param.B[0]->Nspin() == 1) {//NEW:We need this hack for staggered.
+        csParam.gammaBasis = param.B[0]->GammaBasis();
+        csParam.fieldOrder = QUDA_FLOAT2_FIELD_ORDER;
+      }
 
       r = ColorSpinorField::Create(csParam);
 
@@ -105,7 +108,11 @@ namespace quda {
       tmp_coarse = param.B[0]->CreateCoarse(param.geoBlockSize, param.spinBlockSize, param.Nvec, param.mg_global.location[param.level+1]);
 
       // check if we are coarsening the preconditioned system then
+#ifndef STAGGERED_NORM_MULTIGRID
       bool preconditioned_coarsen = (param.coarse_grid_solution_type == QUDA_MATPC_SOLUTION && param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE);
+#else
+      bool preconditioned_coarsen = false;
+#endif
 
       // create coarse grid operator
       DiracParam diracParam;
@@ -364,7 +371,7 @@ namespace quda {
       transfer->R(*r_coarse, *tmp1);
       transfer->P(*tmp2, *r_coarse);
 #else
-      printfQuda("Odd norm check %e\n", norm2(tmp1->Odd()));
+      if(norm2(tmp1->Odd()) != 0) errorQuda("Null vector odd parity norm is non-zero.\n");
       transfer->R(*r_coarse, tmp1->Even());
       transfer->P(tmp2->Even(), *r_coarse);
       zero(tmp2->Odd());
@@ -406,16 +413,11 @@ namespace quda {
 #else
     zero(*x_coarse);
     zero(*r_coarse);
-printfQuda("Norm before %le\n", norm2(*x_coarse));
     x_coarse->Source(QUDA_RANDOM_SOURCE);
-printfQuda("Norm after coarse %le\n", norm2(*x_coarse));
     transfer->P(tmp2->Even(), *x_coarse);
-printfQuda("Norm after fine  %le (odd = %le)\n", norm2(tmp2->Even()), norm2(tmp2->Odd()));
-printfQuda("Norm r_coarse before %le\n", norm2(*r_coarse));
     transfer->R(*r_coarse, tmp2->Even());
-printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
 
-//    printfQuda("Vector norms %1.8e %1.8e (fine tmp %1.8e) %1.8le \n", norm2(*x_coarse), norm2(*r_coarse), norm2(*tmp2), xmyNorm(*x_coarse, *r_coarse));
+//bug!    printfQuda("Vector norms %1.8e %1.8e (fine tmp %1.8e) %1.8le \n", norm2(*x_coarse), norm2(*r_coarse), norm2(*tmp2), xmyNorm(*x_coarse, *r_coarse));
     printfQuda("Vector norms %1.8e %1.8e (fine tmp %1.8e)\n", norm2(*x_coarse), norm2(*r_coarse), norm2(*tmp2));
 #endif
 
@@ -443,7 +445,12 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
 	dirac.DslashXpay(tmp2->Odd(), tmp1->Even(), QUDA_ODD_PARITY, tmp1->Odd(), 1.0);
       }
     } else {
+#ifndef STAGGERED_NORM_MULTIGRID
       (*param.matResidual)(*tmp2,*tmp1);
+#else
+      (*param.matResidual)(tmp2->Even(),tmp1->Even());
+      zero(tmp2->Odd());
+#endif
     }
 
     transfer->R(*x_coarse, *tmp2);
@@ -474,7 +481,7 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
     }
     printfQuda("L2 relative deviation = %e\n\n", deviation);
     if (deviation > tol) errorQuda("failed");
-    
+#ifndef STAGGERED_NORM_MULTIGRID    
     // here we check that the Hermitian conjugate operator is working
     // as expected for both the smoother and residual Dirac operators
     if (param.coarse_grid_solution_type == QUDA_MATPC_SOLUTION && param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE) {
@@ -505,6 +512,7 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
 		 real(dot), imag(dot), deviation);
       if (deviation > tol) errorQuda("failed");
     }
+#endif
 
 #ifdef ARPACK_LIB
     printfQuda("\n");
@@ -583,9 +591,10 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
 
     if ( outer_solution_type == QUDA_MATPC_SOLUTION && inner_solution_type == QUDA_MAT_SOLUTION)
       errorQuda("Unsupported solution type combination");
-
+#ifndef STAGGERED_NORM_MULTIGRID
     if ( inner_solution_type == QUDA_MATPC_SOLUTION && param.smoother_solve_type != QUDA_DIRECT_PC_SOLVE)
       errorQuda("For this coarse grid solution type, a preconditioned smoother is required");
+#endif
 
     if ( debug ) printfQuda("entering V-cycle with x2=%e, r2=%e\n", norm2(x), norm2(b));
 
@@ -617,9 +626,15 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
       // if using preconditioned smoother then need to reconstruct full residual
       // FIXME extend this check for precision, Schwarz, etc.
       bool use_solver_residual =
+#ifndef STAGGERED_NORM_MULTIGRID
 	( (param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE && inner_solution_type == QUDA_MATPC_SOLUTION) ||
 	  (param.smoother_solve_type == QUDA_DIRECT_SOLVE && inner_solution_type == QUDA_MAT_SOLUTION) )
 	? true : false;
+#else
+	( (param.smoother_solve_type == QUDA_NORMOP_PC_SOLVE && inner_solution_type == QUDA_MATPC_SOLUTION) ||
+	  (param.smoother_solve_type == QUDA_DIRECT_SOLVE && inner_solution_type == QUDA_MAT_SOLUTION) )
+	? true : false;
+#endif
 
       // FIXME this is currently borked if inner solver is preconditioned
       double r2 = 0.0;
@@ -658,8 +673,13 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
       if (param.smoother_solve_type == QUDA_DIRECT_PC_SOLVE) {
 	in = b_tilde;
       } else { // this incurs unecessary copying
+#ifndef STAGGERED_NORM_MULTIGRID
 	*r = b;
 	in = r;
+#else
+	r->Even() = b;
+	in = &r->Even();
+#endif
       }
 
       //dirac.prepare(in, out, solution, residual, inner_solution_type);
@@ -679,9 +699,21 @@ printfQuda("Norm r_coarse after %le\n", norm2(*r_coarse));
     }
 
     if ( debug ) {
+#ifndef STAGGERED_NORM_MULTIGRID
       (*param.matResidual)(*r, x);
       double r2 = xmyNorm(b, *r);
       printfQuda("leaving V-cycle with x2=%e, r2=%e\n", norm2(x), r2);
+#else
+      double r2;
+      if(param.level == 0){
+        (*param.matResidual)(r->Even(), x);
+        r2 = xmyNorm(b, r->Even());
+      } else {
+        (*param.matResidual)(*r, x);
+        r2 = xmyNorm(b, *r);
+      }
+      printfQuda("leaving V-cycle with x2=%e, r2=%e\n", norm2(x), r2);
+#endif
     }
 
     setOutputPrefix(param.level == 0 ? "" : prefix_bkup);
