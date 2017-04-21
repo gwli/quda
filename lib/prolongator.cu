@@ -239,6 +239,8 @@ namespace quda {
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,2>(out, in, v, fine_to_coarse, parity);
       } else if (nVec == 4) {
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,4>(out, in, v, fine_to_coarse, parity);
+      } else if (nVec == 8) {
+	Prolongate<Float,fineSpin,fineColor,coarseSpin,8>(out, in, v, fine_to_coarse, parity);
       } else if (nVec == 24) {
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,24>(out, in, v, fine_to_coarse, parity);
       } else if (nVec == 32) {
@@ -246,7 +248,7 @@ namespace quda {
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }
-#ifdef PROLONGATOR_DEBUG
+#ifndef PROLONGATOR_DEBUG
     } else if (out.Ncolor() == 2) {
       const int fineColor = 2;
       if (nVec == 2) { // these are probably only for debugging only
@@ -261,7 +263,7 @@ namespace quda {
       const int fineColor = 24;
       if (nVec == 24) { // to keep compilation under control coarse grids have same or more colors
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,24>(out, in, v, fine_to_coarse, parity);
-#ifdef PROLONGATOR_DEBUG
+#ifndef PROLONGATOR_DEBUG
       } else if (nVec == 32) {
 	Prolongate<Float,fineSpin,fineColor,coarseSpin,32>(out, in, v, fine_to_coarse, parity);
 #endif

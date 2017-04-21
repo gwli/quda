@@ -470,6 +470,8 @@ namespace quda {
 	Restrict<Float,fineSpin,fineColor,coarseSpin,2>(out, in, v, fine_to_coarse, coarse_to_fine, parity);
       } else if (nVec == 4) {
 	Restrict<Float,fineSpin,fineColor,coarseSpin,4>(out, in, v, fine_to_coarse, coarse_to_fine, parity);
+      } else if (nVec == 8) {
+	Restrict<Float,fineSpin,fineColor,coarseSpin,8>(out, in, v, fine_to_coarse, coarse_to_fine, parity);
       } else if (nVec == 24) {
 	Restrict<Float,fineSpin,fineColor,coarseSpin,24>(out, in, v, fine_to_coarse, coarse_to_fine, parity);
       } else if (nVec == 32) {
@@ -477,7 +479,7 @@ namespace quda {
       } else {
 	errorQuda("Unsupported nVec %d", nVec);
       }
-#ifdef RESTRICTOR_DEBUG
+#ifndef RESTRICTOR_DEBUG
     } else if (in.Ncolor() == 2) {
       const int fineColor = 2;
       if (nVec == 2) { // these are probably only for debugging only

@@ -31,7 +31,10 @@
 #define mySpinorSiteSize 6
 
 #define  USE_QDP_LINKS
-//#define  REGULAR_SOLVE
+//#define  REGULAR_SOLVE //Do just a regular solve (not multigrid)
+//#define FULL_REPORT //report smoother iteration info
+#define NONPC_SMOOTHER //Direct solve for the smoother
+#define CG_SMOOTHER //USE CG smoother
 
 #include <dirac_quda.h>
 #include <dslash_quda.h>
@@ -214,7 +217,7 @@ void constructFullSpinorField(Float *res, const int Vol) {
 #endif
 
 void setMultigridParam(QudaMultigridParam &mg_param) {
-  QudaInvertParam &inv_param = *mg_param.invert_param;
+  QudaInvertParam &inv_param = *mg_param.invert_param;//this will be used to setup SolverParam parent in MGParam class
 
   for (int i=0; i<mg_levels-1; i++) printfQuda(" - level %d number of null-space vectors %d\n", i+1, nvec[i]);
 
@@ -250,8 +253,10 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
   inv_param.solution_type = QUDA_MAT_SOLUTION;//fixed
   //inv_param.solution_type = QUDA_MATPC_SOLUTION;//not allowed
 
-  inv_param.solve_type = QUDA_DIRECT_SOLVE;//fixed
-  //inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;//not allowed
+  //inv_param.solve_type = QUDA_DIRECT_SOLVE;//fixed
+  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;//not allowed
+
+  const int default_nvecs = _2d_u1_emulation ? 8 : 24;
 
   mg_param.invert_param = &inv_param;
   mg_param.n_level = mg_levels;
@@ -267,7 +272,7 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
     mg_param.setup_tol[i] = setup_tol;
 
     mg_param.spin_block_size[i] = 1;// 1 or 0 (1 for parity blocking)
-    mg_param.n_vec[i] =  nvec[i] == 0 ? ( !_2d_u1_emulation ? 24 : 4 ) : nvec[i]; // default to 24 vectors if not set
+    mg_param.n_vec[i] =  nvec[i] == 0 ? default_nvecs : nvec[i]; // default to 24 vectors if not set
     mg_param.nu_pre[i] = 4;//nu_pre;
     mg_param.nu_post[i] = 4;//nu_post;
     //mg_param.mu_factor[i] = mu_factor[i];
@@ -283,8 +288,11 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
 
     // set to QUDA_DIRECT_SOLVE for no even/odd preconditioning on the smoother
     // set to QUDA_DIRECT_PC_SOLVE for to enable even/odd preconditioning on the smoother
+#ifndef NONPC_SMOOTHER
     mg_param.smoother_solve_type[i] = QUDA_DIRECT_PC_SOLVE; // EVEN-ODD
-    //mg_param.smoother_solve_type[i] = QUDA_DIRECT_SOLVE; 
+#else
+    mg_param.smoother_solve_type[i] = QUDA_DIRECT_SOLVE; 
+#endif
 
     // set to QUDA_MAT_SOLUTION to inject a full field into coarse grid
     // set to QUDA_MATPC_SOLUTION to inject single parity field into coarse grid
@@ -299,16 +307,19 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
     //mg_param.location[i] = QUDA_CPU_FIELD_LOCATION;
   }
 
-  mg_param.smoother_solve_type[0] = solve_type == QUDA_NORMOP_PC_SOLVE? QUDA_NORMOP_PC_SOLVE : mg_param.smoother_solve_type[0]; //or choose QUDA_DIRECT_SOLVE;
-  //mg_param.smoother_solve_type[0] = QUDA_NORMOP_PC_SOLVE;//enforce PC solve
+  //mg_param.smoother_solve_type[0] = solve_type == QUDA_NORMOP_PC_SOLVE? QUDA_NORMOP_PC_SOLVE : mg_param.smoother_solve_type[0]; //or choose QUDA_DIRECT_SOLVE;
+  mg_param.smoother_solve_type[0] = QUDA_NORMOP_PC_SOLVE;//enforce NORMOPPC solve
   // coarsen the spin on the first restriction is undefined for staggered fields
   mg_param.spin_block_size[0] = 0;
 
   if(mg_param.smoother_solve_type[0] == QUDA_NORMOP_PC_SOLVE || mg_param.smoother_solve_type[0] == QUDA_DIRECT_PC_SOLVE) 
   { 
-     //mg_param.smoother[0] = QUDA_CG_INVERTER; //or choose QUDA_GCR_INVERTER
+#ifdef CG_SMOOTHER
+     mg_param.smoother[0] = QUDA_CG_INVERTER; //or choose QUDA_GCR_INVERTER
+#else
      //mg_param.smoother[0] = QUDA_MR_INVERTER; //or choose QUDA_GCR_INVERTER (WARNING: QUDA_MR_INVERTER works better...)
      mg_param.smoother[0] = QUDA_GCR_INVERTER;
+#endif
      mg_param.coarse_grid_solution_type[0] = QUDA_MATPC_SOLUTION;//just to be safe.
      ////mg_param.coarse_grid_solution_type[0] = QUDA_MAT_SOLUTION;//remove
   } 
@@ -345,7 +356,7 @@ void setMultigridParam(QudaMultigridParam &mg_param) {
 
   // these need to tbe set for now but are actually ignored by the MG setup
   // needed to make it pass the initialization test
-  inv_param.inv_type = QUDA_GCR_INVERTER;
+  inv_param.inv_type = QUDA_GCR_INVERTER;//should this correlate with smoother? (it will be overwritten in mg setup, like param_presmooth->inv_type = param.smoother;, but be careful!)
   inv_param.tol = 1e-10;
   inv_param.maxiter = 100;
   inv_param.reliable_delta = 1e-10;
@@ -439,7 +450,11 @@ set_params(QudaGaugeParam* gaugeParam, QudaInvertParam* inv_param,
 #endif
   inv_param->tol_precondition = 1e-1;
   inv_param->maxiter_precondition = 10;
+#ifndef FULL_REPORT
   inv_param->verbosity_precondition = QUDA_SILENT;
+#else
+  inv_param->verbosity_precondition = QUDA_VERBOSE;
+#endif
   inv_param->cuda_prec_precondition = inv_param->cuda_prec_sloppy;
 
   inv_param->solution_type = QUDA_MATPCDAG_MATPC_SOLUTION;
@@ -457,7 +472,7 @@ set_params(QudaGaugeParam* gaugeParam, QudaInvertParam* inv_param,
 
   inv_param->dslash_type = dslash_type;
 
-  inv_param->sp_pad = X1*X2*X3/2;
+  inv_param->sp_pad = 0;
   inv_param->use_init_guess = QUDA_USE_INIT_GUESS_YES;
 
   inv_param->input_location = QUDA_CPU_FIELD_LOCATION;

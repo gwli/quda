@@ -123,7 +123,7 @@ namespace quda {
       FillV<Float,nSpin,nColor,20>(V,B);
     } else if (Nvec == 24) {
       FillV<Float,nSpin,nColor,24>(V,B);
-#ifdef TRANSFER_DEBUG
+#ifndef TRANSFER_DEBUG
     } else if (Nvec == 32) {
       FillV<Float,nSpin,nColor,32>(V,B);
     } else if (Nvec == 48) {
@@ -557,7 +557,7 @@ namespace quda {
       BlockOrthogonalize<Float,nSpin,16>(V, Nvec, geo_bs, geo_map, spin_bs);
     } else if (V.Ncolor()/Nvec == 24) {
       BlockOrthogonalize<Float,nSpin,24>(V, Nvec, geo_bs, geo_map, spin_bs);
-#ifdef TRANSFER_DEBUG
+#ifndef TRANSFER_DEBUG
     } else if (V.Ncolor()/Nvec == 32) {
       BlockOrthogonalize<Float,nSpin,32>(V, Nvec, geo_bs, geo_map, spin_bs);
     } else if (V.Ncolor()/Nvec == 48) {
