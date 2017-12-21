@@ -1,0 +1,3 @@
+[submodule "qmp"]
+	path = qmp
+	url = https://github.com/usqcd-software/qmp.git
