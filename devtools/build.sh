@@ -1,4 +1,4 @@
-BMDir=`pwd`
+BMDir=`pwd`/..
 cd $BMDir
 
 #fix old mismatch version of automake
