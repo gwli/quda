@@ -10,6 +10,7 @@ autoconf
 
 cd ..
 
+rm -fr qmp-build qmp-install
 mkdir qmp-build
 cd qmp-build
 CC=mpicc CXX=mpicxx CFLAGS="-std=gnu99" ../qmp/configure --prefix=$BMDir/qmp-install --with-qmp-comms-type=MPI --with-qmp-comms-cflags="" --with-qmp-comms-ldflags="" --with-qmp-comms-libs=""
@@ -17,6 +18,7 @@ make -j install
 
 
 cd $BMDir
+rm -fr quda-build quda-install
 mkdir quda-build
 cd   quda-build
 export CFLAGS="-O3 -g -march=core2 -fargument-noalias-global -D_GNU_SOURCE"
